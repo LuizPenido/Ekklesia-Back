@@ -35,9 +35,16 @@ function verificarAdmin(req, res, next) {
   next();
 }
 
-app.post("/api/auth/registro", async (req, res) => {
+function verificarAdminOuLider(req, res, next) {
+  if (req.usuario.tipo_usuario !== "ADMIN" && req.usuario.tipo_usuario !== "LIDER") {
+    return res.status(403).json({ error: "Acesso negado. Apenas administradores e líderes podem executar esta ação" });
+  }
+  next();
+}
+
+app.post("/api/auth/registro", verificarToken, verificarAdminOuLider, async (req, res) => {
   try {
-    const { nome, email, senha } = req.body;
+    const { nome, email, senha, tipo_usuario = "USUARIO" } = req.body;
 
     if (!nome || !email || !senha) {
       return res.status(400).json({ error: "Nome, email e senha são obrigatórios" });
@@ -51,19 +58,17 @@ app.post("/api/auth/registro", async (req, res) => {
       try {
         const hash = await bcrypt.hash(senha, 10);
 
-        db.run("INSERT INTO USUARIO (nome, email, senha_hash, tipo_usuario) VALUES (?, ?, ?, ?)", [nome, email, hash, "USUARIO"], function (err) {
+        db.run("INSERT INTO USUARIO (nome, email, senha_hash, tipo_usuario) VALUES (?, ?, ?, ?)", [nome, email, hash, tipo_usuario], function (err) {
           if (err) {
             return res.status(500).json({ error: err.message });
           }
-
-          const token = jwt.sign({ id: this.lastID, email, tipo_usuario: "USUARIO" }, JWT_SECRET, { expiresIn: "24h" });
 
           res.status(201).json({
             id: this.lastID,
             nome,
             email,
-            tipo_usuario: "USUARIO",
-            token,
+            tipo_usuario,
+            message: "Usuário cadastrado com sucesso",
           });
         });
       } catch (error) {
