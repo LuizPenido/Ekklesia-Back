@@ -8,7 +8,7 @@ const db = new sqlite3.Database(DB_PATH, (err) => {
   if (err) {
     console.error("Erro ao conectar ao banco de dados:", err.message);
   } else {
-    console.log("Conectado ao SQLite em:", DB_PATH);
+    console.log("Conectado ao SQLite");
     initializeDatabase();
   }
 });
@@ -27,7 +27,7 @@ function initializeDatabase() {
       )`,
       (err) => {
         if (err) console.error("Erro ao criar tabela USUARIO:", err.message);
-        else console.log("Tabela USUARIO verificada/criada");
+        else console.log("Tabela USUARIO criada");
       },
     );
 
@@ -40,7 +40,7 @@ function initializeDatabase() {
       )`,
       (err) => {
         if (err) console.error("Erro ao criar tabela MINISTERIO:", err.message);
-        else console.log("Tabela MINISTERIO verificada/criada");
+        else console.log("Tabela MINISTERIO criada");
       },
     );
 
@@ -57,7 +57,7 @@ function initializeDatabase() {
       )`,
       (err) => {
         if (err) console.error("Erro ao criar tabela USUARIO_MINISTERIO:", err.message);
-        else console.log("Tabela USUARIO_MINISTERIO verificada/criada");
+        else console.log("Tabela USUARIO_MINISTERIO criada");
       },
     );
 
@@ -73,7 +73,7 @@ function initializeDatabase() {
       )`,
       (err) => {
         if (err) console.error("Erro ao criar tabela EVENTO:", err.message);
-        else console.log("Tabela EVENTO verificada/criada");
+        else console.log("Tabela EVENTO criada");
       },
     );
 
@@ -92,7 +92,7 @@ function initializeDatabase() {
       )`,
       (err) => {
         if (err) console.error("Erro ao criar tabela ESCALA:", err.message);
-        else console.log("Tabela ESCALA verificada/criada");
+        else console.log("Tabela ESCALA criada");
       },
     );
 
@@ -111,7 +111,7 @@ function initializeDatabase() {
       )`,
       (err) => {
         if (err) console.error("Erro ao criar tabela ESCALA_PARTICIPANTE:", err.message);
-        else console.log("Tabela ESCALA_PARTICIPANTE verificada/criada");
+        else console.log("Tabela ESCALA_PARTICIPANTE criada");
       },
     );
 
@@ -129,7 +129,7 @@ function criarSuperAdmin() {
 
     db.get("SELECT * FROM USUARIO WHERE email = ?", [email], async (err, row) => {
       if (row) {
-        console.log("✓ Super Admin já existe!");
+        console.log("Super Admin já existe!");
         resolve();
         return;
       }
@@ -139,9 +139,7 @@ function criarSuperAdmin() {
 
         db.run("INSERT INTO USUARIO (nome, email, senha_hash, tipo_usuario) VALUES (?, ?, ?, ?)", [nome, email, senhaHash, "ADMIN"], (err) => {
           if (!err) {
-            console.log(`✓ Super Admin criado!`);
-            console.log(`   Email: ${email}`);
-            console.log(`   Senha: ${senhaPlana}`);
+            console.log("Super Admin criado!");
           } else {
             console.error("Erro ao criar Super Admin:", err.message);
           }

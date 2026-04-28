@@ -172,23 +172,305 @@ app.delete("/api/admin/usuarios/:id", verificarToken, verificarAdmin, (req, res)
   });
 });
 
+app.get("/api/admin/usuarios", verificarToken, verificarAdmin, (req, res) => {
+  db.all("SELECT id, nome, email, tipo_usuario, criado_em FROM USUARIO ORDER BY criado_em DESC", [], (err, usuarios) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(usuarios);
+  });
+});
+
+app.get("/api/admin/usuarios/:id", verificarToken, verificarAdmin, (req, res) => {
+  db.get("SELECT id, nome, email, tipo_usuario, criado_em FROM USUARIO WHERE id = ?", [req.params.id], (err, usuario) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    if (!usuario) {
+      return res.status(404).json({ error: "Usuário não encontrado" });
+    }
+    res.json(usuario);
+  });
+});
+
+app.put("/api/admin/usuarios/:id", verificarToken, verificarAdmin, async (req, res) => {
+  const { nome, email, tipo_usuario } = req.body;
+  const usuarioId = req.params.id;
+
+  if (!nome || !email || !tipo_usuario) {
+    return res.status(400).json({ error: "Nome, email e tipo de usuário são obrigatórios" });
+  }
+
+  db.get("SELECT email FROM USUARIO WHERE email = ? AND id != ?", [email, usuarioId], (err, row) => {
+    if (row) {
+      return res.status(400).json({ error: "Email já existe" });
+    }
+
+    db.run("UPDATE USUARIO SET nome = ?, email = ?, tipo_usuario = ?, atualizado_em = CURRENT_TIMESTAMP WHERE id = ?", [nome, email, tipo_usuario, usuarioId], function (err) {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      if (this.changes === 0) {
+        return res.status(404).json({ error: "Usuário não encontrado" });
+      }
+      res.json({ message: "Usuário atualizado com sucesso" });
+    });
+  });
+});
+
+app.post("/api/eventos", verificarToken, verificarAdminOuLider, (req, res) => {
+  const { titulo, descricao, local, inicio_em, fim_em } = req.body;
+
+  if (!titulo || !inicio_em || !fim_em) {
+    return res.status(400).json({ error: "Título, início e fim são obrigatórios" });
+  }
+
+  db.run(
+    "INSERT INTO EVENTO (titulo, descricao, local, inicio_em, fim_em) VALUES (?, ?, ?, ?, ?)",
+    [titulo, descricao || null, local || null, inicio_em, fim_em],
+    function (err) {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      res.status(201).json({
+        id: this.lastID,
+        titulo,
+        descricao,
+        local,
+        inicio_em,
+        fim_em,
+        message: "Evento criado com sucesso",
+      });
+    }
+  );
+});
+
+app.get("/api/eventos", verificarToken, (req, res) => {
+  db.all("SELECT * FROM EVENTO ORDER BY inicio_em DESC", [], (err, eventos) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(eventos);
+  });
+});
+
+app.get("/api/eventos/:id", verificarToken, (req, res) => {
+  db.get("SELECT * FROM EVENTO WHERE id = ?", [req.params.id], (err, evento) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    if (!evento) {
+      return res.status(404).json({ error: "Evento não encontrado" });
+    }
+    res.json(evento);
+  });
+});
+
+app.put("/api/eventos/:id", verificarToken, verificarAdminOuLider, (req, res) => {
+  const { titulo, descricao, local, inicio_em, fim_em } = req.body;
+
+  if (!titulo || !inicio_em || !fim_em) {
+    return res.status(400).json({ error: "Título, início e fim são obrigatórios" });
+  }
+
+  db.run(
+    "UPDATE EVENTO SET titulo = ?, descricao = ?, local = ?, inicio_em = ?, fim_em = ?, criado_em = CURRENT_TIMESTAMP WHERE id = ?",
+    [titulo, descricao || null, local || null, inicio_em, fim_em, req.params.id],
+    function (err) {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      if (this.changes === 0) {
+        return res.status(404).json({ error: "Evento não encontrado" });
+      }
+      res.json({ message: "Evento atualizado com sucesso" });
+    }
+  );
+});
+
+app.delete("/api/eventos/:id", verificarToken, verificarAdminOuLider, (req, res) => {
+  db.run("DELETE FROM EVENTO WHERE id = ?", [req.params.id], function (err) {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    if (this.changes === 0) {
+      return res.status(404).json({ error: "Evento não encontrado" });
+    }
+    res.json({ message: "Evento deletado com sucesso" });
+  });
+});
+
+app.post("/api/escalas", verificarToken, verificarAdminOuLider, (req, res) => {
+  const { evento_id, ministerio_id, nome, inicio_em, fim_em, observacoes } = req.body;
+
+  db.run(
+    "INSERT INTO ESCALA (evento_id, ministerio_id, nome, inicio_em, fim_em, observacoes) VALUES (?, ?, ?, ?, ?, ?)",
+    [evento_id, ministerio_id, nome, inicio_em, fim_em, observacoes || null],
+    function (err) {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      res.status(201).json({
+        id: this.lastID,
+        evento_id,
+        ministerio_id,
+        nome,
+        inicio_em,
+        fim_em,
+        observacoes,
+        message: "Escala criada com sucesso",
+      });
+    }
+  );
+});
+
+app.get("/api/escalas", verificarToken, (req, res) => {
+  db.all("SELECT * FROM ESCALA ORDER BY inicio_em DESC", [], (err, escalas) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(escalas);
+  });
+});
+
+app.get("/api/escalas/:id", verificarToken, (req, res) => {
+  db.get("SELECT * FROM ESCALA WHERE id = ?", [req.params.id], (err, escala) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    if (!escala) {
+      return res.status(404).json({ error: "Escala não encontrada" });
+    }
+    res.json(escala);
+  });
+});
+
+app.get("/api/escalas/:id/participantes", verificarToken, (req, res) => {
+  const query = `
+    SELECT 
+      ep.id,
+      ep.escala_id,
+      ep.usuario_id,
+      ep.funcao_id,
+      ep.status_convite,
+      ep.observacao,
+      u.nome,
+      u.email
+    FROM ESCALA_PARTICIPANTE ep
+    JOIN USUARIO u ON ep.usuario_id = u.id
+    WHERE ep.escala_id = ?
+    ORDER BY u.nome
+  `;
+
+  db.all(query, [req.params.id], (err, participantes) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(participantes);
+  });
+});
+
+app.post("/api/escalas/:id/participantes", verificarToken, verificarAdminOuLider, (req, res) => {
+  const { usuario_id, funcao_id, observacao } = req.body;
+  const escala_id = req.params.id;
+
+  if (!usuario_id) {
+    return res.status(400).json({ error: "usuario_id é obrigatório" });
+  }
+
+  db.run(
+    "INSERT INTO ESCALA_PARTICIPANTE (escala_id, usuario_id, funcao_id, observacao, status_convite) VALUES (?, ?, ?, ?, ?)",
+    [escala_id, usuario_id, funcao_id || null, observacao || null, "PENDENTE"],
+    function (err) {
+      if (err) {
+        if (err.message.includes("UNIQUE")) {
+          return res.status(400).json({ error: "Usuário já adicionado a esta escala" });
+        }
+        return res.status(500).json({ error: err.message });
+      }
+      res.status(201).json({
+        id: this.lastID,
+        escala_id,
+        usuario_id,
+        funcao_id,
+        observacao,
+        status_convite: "PENDENTE",
+        message: "Participante adicionado com sucesso",
+      });
+    }
+  );
+});
+
+app.put("/api/escalas/:id", verificarToken, verificarAdminOuLider, (req, res) => {
+  const { nome, inicio_em, fim_em, observacoes } = req.body;
+
+  if (!nome || !inicio_em || !fim_em) {
+    return res.status(400).json({ error: "Nome, início e fim são obrigatórios" });
+  }
+
+  db.run(
+    "UPDATE ESCALA SET nome = ?, inicio_em = ?, fim_em = ?, observacoes = ? WHERE id = ?",
+    [nome, inicio_em, fim_em, observacoes || null, req.params.id],
+    function (err) {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      if (this.changes === 0) {
+        return res.status(404).json({ error: "Escala não encontrada" });
+      }
+      res.json({ message: "Escala atualizada com sucesso" });
+    }
+  );
+});
+
+app.put("/api/escalas/participantes/:id", verificarToken, (req, res) => {
+  const { status_convite, observacao } = req.body;
+
+  if (!status_convite) {
+    return res.status(400).json({ error: "status_convite é obrigatório" });
+  }
+
+  db.run(
+    "UPDATE ESCALA_PARTICIPANTE SET status_convite = ?, observacao = ? WHERE id = ?",
+    [status_convite, observacao || null, req.params.id],
+    function (err) {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      if (this.changes === 0) {
+        return res.status(404).json({ error: "Participante não encontrado" });
+      }
+      res.json({ message: "Status do participante atualizado com sucesso" });
+    }
+  );
+});
+
+app.delete("/api/escalas/:id", verificarToken, verificarAdminOuLider, (req, res) => {
+  db.run("DELETE FROM ESCALA WHERE id = ?", [req.params.id], function (err) {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    if (this.changes === 0) {
+      return res.status(404).json({ error: "Escala não encontrada" });
+    }
+    res.json({ message: "Escala deletada com sucesso" });
+  });
+});
+
+app.delete("/api/escalas/participantes/:id", verificarToken, verificarAdminOuLider, (req, res) => {
+  db.run("DELETE FROM ESCALA_PARTICIPANTE WHERE id = ?", [req.params.id], function (err) {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    if (this.changes === 0) {
+      return res.status(404).json({ error: "Participante não encontrado" });
+    }
+    res.json({ message: "Participante removido com sucesso" });
+  });
+});
+
 app.listen(PORT, () => {
-  console.log(`
-╔════════════════════════════════════════════════════════╗
-║        Ekklesia Backend - Servidor iniciado            ║
-╠════════════════════════════════════════════════════════╣
-║  🚀 Servidor rodando em: http://localhost:${PORT}     ║
-║  📁 Banco de dados: db/ekklesia.db                     ║
-║                                                        ║
-║  Endpoints de Autenticação:                            ║
-║  POST   /api/auth/registro                             ║
-║  POST   /api/auth/login                                ║
-║  GET    /api/me (requer token)                         ║
-║                                                        ║
-║  Endpoints de Admin:                                   ║
-║  DELETE /api/admin/usuarios/:id (requer admin)         ║
-╚════════════════════════════════════════════════════════╝
-  `);
+  console.log(`Servidor rodando em: http://localhost:${PORT}`);
 });
 
 module.exports = app;
