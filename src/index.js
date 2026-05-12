@@ -1,5 +1,4 @@
 const express = require("express");
-const cors = require("cors");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const db = require("./database");
@@ -8,7 +7,13 @@ const app = express();
 const PORT = 3000;
 const JWT_SECRET = "seu_super_secret_key_aqui";
 
-app.use(cors());
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -133,6 +138,15 @@ app.get("/api/me", verificarToken, (req, res) => {
     }
 
     res.json(usuario);
+  });
+});
+
+app.get("/api/usuarios", verificarToken, verificarAdminOuLider, (req, res) => {
+  db.all("SELECT id, nome, email, tipo_usuario FROM USUARIO ORDER BY nome", [], (err, usuarios) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(usuarios);
   });
 });
 
@@ -303,25 +317,27 @@ app.delete("/api/eventos/:id", verificarToken, verificarAdminOuLider, (req, res)
 app.post("/api/escalas", verificarToken, verificarAdminOuLider, (req, res) => {
   const { evento_id, ministerio_id, nome, inicio_em, fim_em, observacoes } = req.body;
 
-  db.run(
-    "INSERT INTO ESCALA (evento_id, ministerio_id, nome, inicio_em, fim_em, observacoes) VALUES (?, ?, ?, ?, ?, ?)",
-    [evento_id, ministerio_id, nome, inicio_em, fim_em, observacoes || null],
-    function (err) {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      res.status(201).json({
-        id: this.lastID,
-        evento_id,
-        ministerio_id,
-        nome,
-        inicio_em,
-        fim_em,
-        observacoes,
-        message: "Escala criada com sucesso",
-      });
+  if (!evento_id || !nome || !inicio_em || !fim_em) {
+    return res.status(400).json({ error: "evento_id, nome, inicio_em e fim_em são obrigatórios" });
+  }
+
+  db.get("SELECT inicio_em, fim_em FROM EVENTO WHERE id = ?", [evento_id], (err, evento) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!evento) return res.status(404).json({ error: "Evento não encontrado" });
+
+    if (new Date(inicio_em) < new Date(evento.inicio_em) || new Date(fim_em) > new Date(evento.fim_em)) {
+      return res.status(400).json({ error: "A escala deve estar dentro do período do evento" });
     }
-  );
+
+    db.run(
+      "INSERT INTO ESCALA (evento_id, ministerio_id, nome, inicio_em, fim_em, observacoes, criado_por) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [evento_id, ministerio_id, nome, inicio_em, fim_em, observacoes || null, req.usuario.id],
+      function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.status(201).json({ id: this.lastID, evento_id, ministerio_id, nome, inicio_em, fim_em, observacoes, criado_por: req.usuario.id, message: "Escala criada com sucesso" });
+      }
+    );
+  });
 });
 
 app.get("/api/escalas", verificarToken, (req, res) => {
@@ -354,12 +370,14 @@ app.get("/api/escalas/:id/participantes", verificarToken, (req, res) => {
       ep.funcao_id,
       ep.status_convite,
       ep.observacao,
+      ep.horario_inicio,
+      ep.horario_fim,
       u.nome,
       u.email
     FROM ESCALA_PARTICIPANTE ep
     JOIN USUARIO u ON ep.usuario_id = u.id
     WHERE ep.escala_id = ?
-    ORDER BY u.nome
+    ORDER BY CASE WHEN ep.horario_inicio IS NULL THEN 1 ELSE 0 END, ep.horario_inicio ASC, u.nome ASC
   `;
 
   db.all(query, [req.params.id], (err, participantes) => {
@@ -371,34 +389,78 @@ app.get("/api/escalas/:id/participantes", verificarToken, (req, res) => {
 });
 
 app.post("/api/escalas/:id/participantes", verificarToken, verificarAdminOuLider, (req, res) => {
-  const { usuario_id, funcao_id, observacao } = req.body;
+  const { usuario_id, funcao_id, observacao, horario_inicio, horario_fim } = req.body;
   const escala_id = req.params.id;
 
   if (!usuario_id) {
     return res.status(400).json({ error: "usuario_id é obrigatório" });
   }
 
-  db.run(
-    "INSERT INTO ESCALA_PARTICIPANTE (escala_id, usuario_id, funcao_id, observacao, status_convite) VALUES (?, ?, ?, ?, ?)",
-    [escala_id, usuario_id, funcao_id || null, observacao || null, "PENDENTE"],
-    function (err) {
-      if (err) {
-        if (err.message.includes("UNIQUE")) {
-          return res.status(400).json({ error: "Usuário já adicionado a esta escala" });
-        }
-        return res.status(500).json({ error: err.message });
-      }
-      res.status(201).json({
-        id: this.lastID,
-        escala_id,
-        usuario_id,
-        funcao_id,
-        observacao,
-        status_convite: "PENDENTE",
-        message: "Participante adicionado com sucesso",
-      });
+  if (!horario_inicio || !horario_fim) {
+    return res.status(400).json({ error: "Horário de início e fim são obrigatórios" });
+  }
+
+  if (new Date(horario_fim) <= new Date(horario_inicio)) {
+    return res.status(400).json({ error: "O horário de fim deve ser posterior ao horário de início" });
+  }
+
+  // US6 CA2 - check for time conflict with other escalas
+  db.get("SELECT id, nome, inicio_em, fim_em FROM ESCALA WHERE id = ?", [escala_id], (err, escala) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!escala) return res.status(404).json({ error: "Escala não encontrada" });
+
+    if (horario_inicio && new Date(horario_inicio) < new Date(escala.inicio_em)) {
+      return res.status(400).json({ error: "O horário de início do participante não pode ser anterior ao início da escala" });
     }
-  );
+    if (horario_fim && new Date(horario_fim) > new Date(escala.fim_em)) {
+      return res.status(400).json({ error: "O horário de fim do participante não pode ser posterior ao fim da escala" });
+    }
+
+    const conflictQuery = `
+      SELECT e.nome FROM ESCALA_PARTICIPANTE ep
+      JOIN ESCALA e ON ep.escala_id = e.id
+      WHERE ep.usuario_id = ? AND ep.escala_id != ?
+        AND e.inicio_em < ? AND e.fim_em > ?
+      LIMIT 1
+    `;
+    db.get(conflictQuery, [usuario_id, escala_id, escala.fim_em, escala.inicio_em], (err, conflict) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (conflict) {
+        return res.status(400).json({ error: `Conflito de horário: usuário já está na escala "${conflict.nome}" neste período` });
+      }
+
+      db.run(
+        "INSERT INTO ESCALA_PARTICIPANTE (escala_id, usuario_id, funcao_id, observacao, status_convite, horario_inicio, horario_fim, adicionado_por) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [escala_id, usuario_id, funcao_id || null, observacao || null, "PENDENTE", horario_inicio || null, horario_fim || null, req.usuario.id],
+        function (err) {
+          if (err) {
+            if (err.message.includes("UNIQUE")) {
+              return res.status(400).json({ error: "Usuário já adicionado a esta escala" });
+            }
+            return res.status(500).json({ error: err.message });
+          }
+          const participanteId = this.lastID;
+          const funcaoStr = funcao_id ? ` como ${funcao_id}` : '';
+          const fmtDate = (iso) => {
+            const d = new Date(iso);
+            return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+          };
+          const periodoStr = `de ${fmtDate(escala.inicio_em)} até ${fmtDate(escala.fim_em)}`;
+          const titulo = `Você foi escalado: ${escala.nome}`;
+          const descricao = `Você foi adicionado à escala "${escala.nome}"${funcaoStr} (${periodoStr}). Confirme ou recuse sua participação.`;
+          db.run(
+            "INSERT INTO NOTIFICACAO (usuario_id, titulo, descricao, escala_id, participante_id) VALUES (?, ?, ?, ?, ?)",
+            [usuario_id, titulo, descricao, escala_id, participanteId],
+            () => {}
+          );
+          res.status(201).json({
+            id: participanteId, escala_id, usuario_id, funcao_id, observacao, horario_inicio, horario_fim,
+            status_convite: "PENDENTE", message: "Participante adicionado com sucesso",
+          });
+        }
+      );
+    });
+  });
 });
 
 app.put("/api/escalas/:id", verificarToken, verificarAdminOuLider, (req, res) => {
@@ -408,39 +470,68 @@ app.put("/api/escalas/:id", verificarToken, verificarAdminOuLider, (req, res) =>
     return res.status(400).json({ error: "Nome, início e fim são obrigatórios" });
   }
 
-  db.run(
-    "UPDATE ESCALA SET nome = ?, inicio_em = ?, fim_em = ?, observacoes = ? WHERE id = ?",
-    [nome, inicio_em, fim_em, observacoes || null, req.params.id],
-    function (err) {
-      if (err) {
-        return res.status(500).json({ error: err.message });
+  db.get("SELECT evento_id FROM ESCALA WHERE id = ?", [req.params.id], (err, escala) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!escala) return res.status(404).json({ error: "Escala não encontrada" });
+
+    db.get("SELECT inicio_em, fim_em FROM EVENTO WHERE id = ?", [escala.evento_id], (err, evento) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (evento && (new Date(inicio_em) < new Date(evento.inicio_em) || new Date(fim_em) > new Date(evento.fim_em))) {
+        return res.status(400).json({ error: "A escala deve estar dentro do período do evento" });
       }
-      if (this.changes === 0) {
-        return res.status(404).json({ error: "Escala não encontrada" });
-      }
-      res.json({ message: "Escala atualizada com sucesso" });
-    }
-  );
+
+      db.run(
+        "UPDATE ESCALA SET nome = ?, inicio_em = ?, fim_em = ?, observacoes = ? WHERE id = ?",
+        [nome, inicio_em, fim_em, observacoes || null, req.params.id],
+        function (err) {
+          if (err) return res.status(500).json({ error: err.message });
+          if (this.changes === 0) return res.status(404).json({ error: "Escala não encontrada" });
+          res.json({ message: "Escala atualizada com sucesso" });
+        }
+      );
+    });
+  });
 });
 
 app.put("/api/escalas/participantes/:id", verificarToken, (req, res) => {
-  const { status_convite, observacao } = req.body;
+  const { status_convite, observacao, horario_inicio, horario_fim } = req.body;
 
   if (!status_convite) {
     return res.status(400).json({ error: "status_convite é obrigatório" });
   }
 
-  db.run(
-    "UPDATE ESCALA_PARTICIPANTE SET status_convite = ?, observacao = ? WHERE id = ?",
-    [status_convite, observacao || null, req.params.id],
-    function (err) {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      if (this.changes === 0) {
-        return res.status(404).json({ error: "Participante não encontrado" });
-      }
-      res.json({ message: "Status do participante atualizado com sucesso" });
+  db.get(
+    `SELECT ep.usuario_id, ep.escala_id, ep.adicionado_por, u.nome as participante_nome, e.nome as escala_nome, e.criado_por
+     FROM ESCALA_PARTICIPANTE ep
+     JOIN USUARIO u ON ep.usuario_id = u.id
+     JOIN ESCALA e ON ep.escala_id = e.id
+     WHERE ep.id = ?`,
+    [req.params.id],
+    (err, row) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!row) return res.status(404).json({ error: "Participante não encontrado" });
+
+      db.run(
+        "UPDATE ESCALA_PARTICIPANTE SET status_convite = ?, observacao = ?, horario_inicio = ?, horario_fim = ? WHERE id = ?",
+        [status_convite, observacao || null, horario_inicio || null, horario_fim || null, req.params.id],
+        function (err) {
+          if (err) return res.status(500).json({ error: err.message });
+
+          const notificar = row.criado_por || row.adicionado_por;
+          if (notificar && notificar !== row.usuario_id) {
+            const statusText = status_convite === 'CONFIRMADO' ? 'confirmou' : 'recusou';
+            const titulo = `${row.participante_nome} ${statusText} participação`;
+            const descricao = `${row.participante_nome} ${statusText} a participação na escala "${row.escala_nome}".`;
+            db.run(
+              "INSERT INTO NOTIFICACAO (usuario_id, titulo, descricao, escala_id) VALUES (?, ?, ?, ?)",
+              [notificar, titulo, descricao, row.escala_id],
+              () => {}
+            );
+          }
+
+          res.json({ message: "Status do participante atualizado com sucesso" });
+        }
+      );
     }
   );
 });
@@ -467,6 +558,42 @@ app.delete("/api/escalas/participantes/:id", verificarToken, verificarAdminOuLid
     }
     res.json({ message: "Participante removido com sucesso" });
   });
+});
+
+// ==================== NOTIFICAÇÕES ====================
+
+app.get("/api/notificacoes", verificarToken, (req, res) => {
+  db.all(
+    "SELECT * FROM NOTIFICACAO WHERE usuario_id = ? ORDER BY criado_em DESC",
+    [req.usuario.id],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json(rows);
+    }
+  );
+});
+
+app.get("/api/notificacoes/count", verificarToken, (req, res) => {
+  db.get(
+    "SELECT COUNT(*) as count FROM NOTIFICACAO WHERE usuario_id = ? AND lida = 0",
+    [req.usuario.id],
+    (err, row) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ count: row.count });
+    }
+  );
+});
+
+app.put("/api/notificacoes/:id/lida", verificarToken, (req, res) => {
+  db.run(
+    "UPDATE NOTIFICACAO SET lida = 1 WHERE id = ? AND usuario_id = ?",
+    [req.params.id, req.usuario.id],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      if (this.changes === 0) return res.status(404).json({ error: "Notificação não encontrada" });
+      res.json({ message: "Notificação marcada como lida" });
+    }
+  );
 });
 
 app.listen(PORT, () => {

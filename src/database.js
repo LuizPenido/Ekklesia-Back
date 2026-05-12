@@ -86,13 +86,18 @@ function initializeDatabase() {
         inicio_em TIMESTAMP NOT NULL,
         fim_em TIMESTAMP NOT NULL,
         observacoes TEXT NULL,
+        criado_por INTEGER NULL,
         criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (evento_id) REFERENCES EVENTO(id),
-        FOREIGN KEY (ministerio_id) REFERENCES MINISTERIO(id)
+        FOREIGN KEY (ministerio_id) REFERENCES MINISTERIO(id),
+        FOREIGN KEY (criado_por) REFERENCES USUARIO(id)
       )`,
       (err) => {
         if (err) console.error("Erro ao criar tabela ESCALA:", err.message);
-        else console.log("Tabela ESCALA criada");
+        else {
+          console.log("Tabela ESCALA criada");
+          db.run("ALTER TABLE ESCALA ADD COLUMN criado_por INTEGER NULL", () => {});
+        }
       },
     );
 
@@ -104,6 +109,8 @@ function initializeDatabase() {
         funcao_id INTEGER NULL,
         status_convite VARCHAR(20) NOT NULL DEFAULT'PENDENTE',
         observacao TEXT NULL,
+        horario_inicio TIMESTAMP NULL,
+        horario_fim TIMESTAMP NULL,
         criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE (escala_id, usuario_id),
         FOREIGN KEY (escala_id) REFERENCES ESCALA(id),
@@ -111,8 +118,33 @@ function initializeDatabase() {
       )`,
       (err) => {
         if (err) console.error("Erro ao criar tabela ESCALA_PARTICIPANTE:", err.message);
-        else console.log("Tabela ESCALA_PARTICIPANTE criada");
+        else {
+          console.log("Tabela ESCALA_PARTICIPANTE criada");
+          // Adiciona colunas caso tabela já existisse sem elas
+          db.run("ALTER TABLE ESCALA_PARTICIPANTE ADD COLUMN horario_inicio TIMESTAMP NULL", () => {});
+          db.run("ALTER TABLE ESCALA_PARTICIPANTE ADD COLUMN horario_fim TIMESTAMP NULL", () => {});
+          db.run("ALTER TABLE ESCALA_PARTICIPANTE ADD COLUMN adicionado_por INTEGER NULL", () => {});
+        }
       },
+    );
+
+    db.run(
+      `CREATE TABLE IF NOT EXISTS NOTIFICACAO (
+        id INTEGER PRIMARY KEY,
+        usuario_id INTEGER NOT NULL,
+        titulo VARCHAR(200) NOT NULL,
+        descricao TEXT,
+        escala_id INTEGER NULL,
+        participante_id INTEGER NULL,
+        lida INTEGER NOT NULL DEFAULT 0,
+        criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (usuario_id) REFERENCES USUARIO(id),
+        FOREIGN KEY (escala_id) REFERENCES ESCALA(id)
+      )`,
+      (err) => {
+        if (err) console.error("Erro ao criar tabela NOTIFICACAO:", err.message);
+        else console.log("Tabela NOTIFICACAO criada");
+      }
     );
 
     setTimeout(async () => {
