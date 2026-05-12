@@ -8,10 +8,10 @@ const PORT = 3000;
 const JWT_SECRET = "seu_super_secret_key_aqui";
 
 app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  if (req.method === "OPTIONS") return res.sendStatus(204);
   next();
 });
 app.use(express.json());
@@ -239,24 +239,20 @@ app.post("/api/eventos", verificarToken, verificarAdminOuLider, (req, res) => {
     return res.status(400).json({ error: "Título, início e fim são obrigatórios" });
   }
 
-  db.run(
-    "INSERT INTO EVENTO (titulo, descricao, local, inicio_em, fim_em) VALUES (?, ?, ?, ?, ?)",
-    [titulo, descricao || null, local || null, inicio_em, fim_em],
-    function (err) {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      res.status(201).json({
-        id: this.lastID,
-        titulo,
-        descricao,
-        local,
-        inicio_em,
-        fim_em,
-        message: "Evento criado com sucesso",
-      });
+  db.run("INSERT INTO EVENTO (titulo, descricao, local, inicio_em, fim_em) VALUES (?, ?, ?, ?, ?)", [titulo, descricao || null, local || null, inicio_em, fim_em], function (err) {
+    if (err) {
+      return res.status(500).json({ error: err.message });
     }
-  );
+    res.status(201).json({
+      id: this.lastID,
+      titulo,
+      descricao,
+      local,
+      inicio_em,
+      fim_em,
+      message: "Evento criado com sucesso",
+    });
+  });
 });
 
 app.get("/api/eventos", verificarToken, (req, res) => {
@@ -287,19 +283,15 @@ app.put("/api/eventos/:id", verificarToken, verificarAdminOuLider, (req, res) =>
     return res.status(400).json({ error: "Título, início e fim são obrigatórios" });
   }
 
-  db.run(
-    "UPDATE EVENTO SET titulo = ?, descricao = ?, local = ?, inicio_em = ?, fim_em = ?, criado_em = CURRENT_TIMESTAMP WHERE id = ?",
-    [titulo, descricao || null, local || null, inicio_em, fim_em, req.params.id],
-    function (err) {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      if (this.changes === 0) {
-        return res.status(404).json({ error: "Evento não encontrado" });
-      }
-      res.json({ message: "Evento atualizado com sucesso" });
+  db.run("UPDATE EVENTO SET titulo = ?, descricao = ?, local = ?, inicio_em = ?, fim_em = ?, criado_em = CURRENT_TIMESTAMP WHERE id = ?", [titulo, descricao || null, local || null, inicio_em, fim_em, req.params.id], function (err) {
+    if (err) {
+      return res.status(500).json({ error: err.message });
     }
-  );
+    if (this.changes === 0) {
+      return res.status(404).json({ error: "Evento não encontrado" });
+    }
+    res.json({ message: "Evento atualizado com sucesso" });
+  });
 });
 
 app.delete("/api/eventos/:id", verificarToken, verificarAdminOuLider, (req, res) => {
@@ -335,7 +327,7 @@ app.post("/api/escalas", verificarToken, verificarAdminOuLider, (req, res) => {
       function (err) {
         if (err) return res.status(500).json({ error: err.message });
         res.status(201).json({ id: this.lastID, evento_id, ministerio_id, nome, inicio_em, fim_em, observacoes, criado_por: req.usuario.id, message: "Escala criada com sucesso" });
-      }
+      },
     );
   });
 });
@@ -440,24 +432,27 @@ app.post("/api/escalas/:id/participantes", verificarToken, verificarAdminOuLider
             return res.status(500).json({ error: err.message });
           }
           const participanteId = this.lastID;
-          const funcaoStr = funcao_id ? ` como ${funcao_id}` : '';
+          const funcaoStr = funcao_id ? ` como ${funcao_id}` : "";
           const fmtDate = (iso) => {
             const d = new Date(iso);
-            return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+            return d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
           };
           const periodoStr = `de ${fmtDate(escala.inicio_em)} até ${fmtDate(escala.fim_em)}`;
           const titulo = `Você foi escalado: ${escala.nome}`;
           const descricao = `Você foi adicionado à escala "${escala.nome}"${funcaoStr} (${periodoStr}). Confirme ou recuse sua participação.`;
-          db.run(
-            "INSERT INTO NOTIFICACAO (usuario_id, titulo, descricao, escala_id, participante_id) VALUES (?, ?, ?, ?, ?)",
-            [usuario_id, titulo, descricao, escala_id, participanteId],
-            () => {}
-          );
+          db.run("INSERT INTO NOTIFICACAO (usuario_id, titulo, descricao, escala_id, participante_id) VALUES (?, ?, ?, ?, ?)", [usuario_id, titulo, descricao, escala_id, participanteId], () => {});
           res.status(201).json({
-            id: participanteId, escala_id, usuario_id, funcao_id, observacao, horario_inicio, horario_fim,
-            status_convite: "PENDENTE", message: "Participante adicionado com sucesso",
+            id: participanteId,
+            escala_id,
+            usuario_id,
+            funcao_id,
+            observacao,
+            horario_inicio,
+            horario_fim,
+            status_convite: "PENDENTE",
+            message: "Participante adicionado com sucesso",
           });
-        }
+        },
       );
     });
   });
@@ -480,15 +475,11 @@ app.put("/api/escalas/:id", verificarToken, verificarAdminOuLider, (req, res) =>
         return res.status(400).json({ error: "A escala deve estar dentro do período do evento" });
       }
 
-      db.run(
-        "UPDATE ESCALA SET nome = ?, inicio_em = ?, fim_em = ?, observacoes = ? WHERE id = ?",
-        [nome, inicio_em, fim_em, observacoes || null, req.params.id],
-        function (err) {
-          if (err) return res.status(500).json({ error: err.message });
-          if (this.changes === 0) return res.status(404).json({ error: "Escala não encontrada" });
-          res.json({ message: "Escala atualizada com sucesso" });
-        }
-      );
+      db.run("UPDATE ESCALA SET nome = ?, inicio_em = ?, fim_em = ?, observacoes = ? WHERE id = ?", [nome, inicio_em, fim_em, observacoes || null, req.params.id], function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        if (this.changes === 0) return res.status(404).json({ error: "Escala não encontrada" });
+        res.json({ message: "Escala atualizada com sucesso" });
+      });
     });
   });
 });
@@ -519,20 +510,16 @@ app.put("/api/escalas/participantes/:id", verificarToken, (req, res) => {
 
           const notificar = row.criado_por || row.adicionado_por;
           if (notificar && notificar !== row.usuario_id) {
-            const statusText = status_convite === 'CONFIRMADO' ? 'confirmou' : 'recusou';
+            const statusText = status_convite === "CONFIRMADO" ? "confirmou" : "recusou";
             const titulo = `${row.participante_nome} ${statusText} participação`;
             const descricao = `${row.participante_nome} ${statusText} a participação na escala "${row.escala_nome}".`;
-            db.run(
-              "INSERT INTO NOTIFICACAO (usuario_id, titulo, descricao, escala_id) VALUES (?, ?, ?, ?)",
-              [notificar, titulo, descricao, row.escala_id],
-              () => {}
-            );
+            db.run("INSERT INTO NOTIFICACAO (usuario_id, titulo, descricao, escala_id) VALUES (?, ?, ?, ?)", [notificar, titulo, descricao, row.escala_id], () => {});
           }
 
           res.json({ message: "Status do participante atualizado com sucesso" });
-        }
+        },
       );
-    }
+    },
   );
 });
 
@@ -563,37 +550,25 @@ app.delete("/api/escalas/participantes/:id", verificarToken, verificarAdminOuLid
 // ==================== NOTIFICAÇÕES ====================
 
 app.get("/api/notificacoes", verificarToken, (req, res) => {
-  db.all(
-    "SELECT * FROM NOTIFICACAO WHERE usuario_id = ? ORDER BY criado_em DESC",
-    [req.usuario.id],
-    (err, rows) => {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json(rows);
-    }
-  );
+  db.all("SELECT * FROM NOTIFICACAO WHERE usuario_id = ? ORDER BY criado_em DESC", [req.usuario.id], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
 });
 
 app.get("/api/notificacoes/count", verificarToken, (req, res) => {
-  db.get(
-    "SELECT COUNT(*) as count FROM NOTIFICACAO WHERE usuario_id = ? AND lida = 0",
-    [req.usuario.id],
-    (err, row) => {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({ count: row.count });
-    }
-  );
+  db.get("SELECT COUNT(*) as count FROM NOTIFICACAO WHERE usuario_id = ? AND lida = 0", [req.usuario.id], (err, row) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ count: row.count });
+  });
 });
 
 app.put("/api/notificacoes/:id/lida", verificarToken, (req, res) => {
-  db.run(
-    "UPDATE NOTIFICACAO SET lida = 1 WHERE id = ? AND usuario_id = ?",
-    [req.params.id, req.usuario.id],
-    function (err) {
-      if (err) return res.status(500).json({ error: err.message });
-      if (this.changes === 0) return res.status(404).json({ error: "Notificação não encontrada" });
-      res.json({ message: "Notificação marcada como lida" });
-    }
-  );
+  db.run("UPDATE NOTIFICACAO SET lida = 1 WHERE id = ? AND usuario_id = ?", [req.params.id, req.usuario.id], function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    if (this.changes === 0) return res.status(404).json({ error: "Notificação não encontrada" });
+    res.json({ message: "Notificação marcada como lida" });
+  });
 });
 
 app.listen(PORT, () => {

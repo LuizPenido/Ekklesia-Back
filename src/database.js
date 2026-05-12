@@ -144,7 +144,7 @@ function initializeDatabase() {
       (err) => {
         if (err) console.error("Erro ao criar tabela NOTIFICACAO:", err.message);
         else console.log("Tabela NOTIFICACAO criada");
-      }
+      },
     );
 
     setTimeout(async () => {
